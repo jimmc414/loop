@@ -20,9 +20,7 @@ import uuid
 if "ANTHROPIC_API_KEY" in os.environ:
     del os.environ["ANTHROPIC_API_KEY"]
 
-from claude_code_sdk import query, ClaudeCodeOptions
-
-from .config import MODEL, TOTAL_SLOTS, slot_index
+from .config import TOTAL_SLOTS, slot_index
 from .models import (
     Character,
     CharacterTier,
@@ -88,18 +86,8 @@ async def extract_claims_from_conversation(
         conversation_text=conversation_text,
     )
 
-    result_text = ""
-    async for msg in query(
-        prompt=prompt,
-        options=ClaudeCodeOptions(model=MODEL, max_turns=1),
-    ):
-        if hasattr(msg, "content"):
-            for block in msg.content:
-                if hasattr(block, "text"):
-                    result_text += block.text
-
-    # Parse claims
-    result_text = result_text.strip()
+    from .llm import llm_query
+    result_text = (await llm_query(prompt)).strip()
     if result_text.startswith("```"):
         lines = result_text.split("\n")
         start = 1

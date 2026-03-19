@@ -8,9 +8,7 @@ import os
 if "ANTHROPIC_API_KEY" in os.environ:
     del os.environ["ANTHROPIC_API_KEY"]
 
-from claude_code_sdk import query, ClaudeCodeOptions
-
-from .config import DATA_DIR, LOCATIONS_TEMPLATE, MODEL, TOTAL_SLOTS
+from .config import DATA_DIR, LOCATIONS_TEMPLATE, TOTAL_SLOTS
 from .models import (
     CausalChainEvent,
     Character,
@@ -35,19 +33,8 @@ from .prompts.world_gen import (
 
 async def _llm_call(prompt: str) -> str:
     """Single LLM call returning text content."""
-    result_text = ""
-    async for msg in query(
-        prompt=prompt,
-        options=ClaudeCodeOptions(
-            model=MODEL,
-            max_turns=1,
-        ),
-    ):
-        if hasattr(msg, "content"):
-            for block in msg.content:
-                if hasattr(block, "text"):
-                    result_text += block.text
-    return result_text
+    from .llm import llm_query
+    return await llm_query(prompt)
 
 
 def _extract_json(text: str) -> dict:

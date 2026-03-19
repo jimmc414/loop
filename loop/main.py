@@ -9,10 +9,8 @@ import sys
 if "ANTHROPIC_API_KEY" in os.environ:
     del os.environ["ANTHROPIC_API_KEY"]
 
-from claude_code_sdk import query, ClaudeCodeOptions
-
 from .actions import ActionResolver
-from .config import MODEL, TOTAL_SLOTS, slot_index as _slot_index
+from .config import TOTAL_SLOTS, slot_index as _slot_index
 from .conversation_engine import ConversationEngine
 from .display import GameDisplay
 from .game_logger import generate_log_path
@@ -29,19 +27,8 @@ from .world_generator import generate_world, load_world
 
 async def _llm_call(prompt: str) -> str:
     """Single LLM call for narration."""
-    result_text = ""
-    async for msg in query(
-        prompt=prompt,
-        options=ClaudeCodeOptions(
-            model=MODEL,
-            max_turns=1,
-        ),
-    ):
-        if hasattr(msg, "content"):
-            for block in msg.content:
-                if hasattr(block, "text"):
-                    result_text += block.text
-    return result_text.strip()
+    from .llm import llm_query
+    return (await llm_query(prompt)).strip()
 
 
 async def main():

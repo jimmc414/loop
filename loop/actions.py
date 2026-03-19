@@ -7,9 +7,7 @@ import os
 if "ANTHROPIC_API_KEY" in os.environ:
     del os.environ["ANTHROPIC_API_KEY"]
 
-from claude_code_sdk import query, ClaudeCodeOptions
-
-from .config import MODEL, slot_index
+from .config import slot_index
 from .conversation_engine import ConversationEngine
 from .display import GameDisplay
 from .intervention import InterventionManager
@@ -338,16 +336,5 @@ class ActionResolver:
 
     async def _llm_call(self, prompt: str) -> str:
         """Short LLM call for descriptions."""
-        result_text = ""
-        async for msg in query(
-            prompt=prompt,
-            options=ClaudeCodeOptions(
-                model=MODEL,
-                max_turns=1,
-            ),
-        ):
-            if hasattr(msg, "content"):
-                for block in msg.content:
-                    if hasattr(block, "text"):
-                        result_text += block.text
-        return result_text.strip() or "..."
+        from .llm import llm_query
+        return (await llm_query(prompt)).strip() or "..."

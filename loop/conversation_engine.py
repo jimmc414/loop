@@ -8,13 +8,10 @@ import re
 if "ANTHROPIC_API_KEY" in os.environ:
     del os.environ["ANTHROPIC_API_KEY"]
 
-from claude_code_sdk import query, ClaudeCodeOptions
-
 from .config import (
     CONFRONT_TRUST_THRESHOLD,
     MAX_CONVERSATION_EXCHANGES,
     MAX_EVIDENCE_PRESENTATIONS,
-    MODEL,
     TOTAL_SLOTS,
     TRUST_DELTA_ACCUSATION_HARSH,
     TRUST_DELTA_ACCUSATION_MILD,
@@ -450,22 +447,9 @@ class ConversationEngine:
 
     async def _get_npc_response(self, system_prompt: str, user_prompt: str) -> str:
         """Get LLM response for NPC dialogue."""
+        from .llm import llm_query
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
-        result_text = ""
-        async for msg in query(
-            prompt=full_prompt,
-            options=ClaudeCodeOptions(
-                model=MODEL,
-                max_turns=1,
-            ),
-        ):
-            if hasattr(msg, "content"):
-                for block in msg.content:
-                    if hasattr(block, "text"):
-                        result_text += block.text
-
-        # Clean up — truncate to complete sentences if too long
-        result_text = result_text.strip()
+        result_text = (await llm_query(full_prompt)).strip()
         if len(result_text) > 500:
             sentences = re.split(r'(?<=[.!?])\s+', result_text)
             truncated = ""
