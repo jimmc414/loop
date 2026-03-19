@@ -1,0 +1,41 @@
+<svg width="1000" height="300" viewBox="0 0 1000 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1000" height="300" fill="#0B1A0F" />
+  
+  <!-- Sun/Amber Glow (Simple circle for compatibility) -->
+  <circle cx="800" cy="100" r="150" fill="#FF8C00" opacity="0.2" />
+
+  <!-- Forest Silhouette -->
+  <g fill="#050A06">
+    <path d="M0 300 L0 200 L20 240 L40 180 L60 250 L80 160 L100 230 L120 190 L140 260 L160 170 L180 240 L200 150 L220 220 L240 180 L260 250 L280 140 L300 230 L320 170 L340 240 L360 160 L380 220 L400 190 L420 260 L440 150 L460 210 L480 180 L500 250 L520 140 L540 220 L560 170 L580 240 L600 130 L620 210 L640 160 L660 230 L680 180 L700 250 L720 150 L740 220 L760 170 L780 240 L800 140 L820 230 L840 160 L860 250 L880 170 L900 220 L920 190 L940 260 L960 150 L980 240 L1000 200 L1000 300 Z" />
+  </g>
+
+  <!-- The Lake -->
+  <rect x="0" y="270" width="1000" height="30" fill="#1A3A5A" opacity="0.4" />
+
+  <!-- Loop Element (Circular Arrow) -->
+  <g transform="translate(500, 150)" opacity="0.5">
+    <path d="M -80,0 A 80,80 0 1,1 0,80" fill="none" stroke="#7DF9FF" stroke-width="2" stroke-dasharray="5,5" />
+    <path d="M 0,80 A 80,80 0 1,1 -80,0" fill="none" stroke="#7DF9FF" stroke-width="2" />
+    <polygon points="-80,0 -85,10 -75,10" fill="#7DF9FF" transform="rotate(-45, -80, 0)" />
+  </g>
+
+  <!-- Evidence Strings -->
+  <g stroke="#8B0000" stroke-width="1.5" opacity="0.6">
+    <line x1="100" y1="100" x2="300" y2="150" />
+    <line x1="300" y1="150" x2="250" y2="250" />
+    <line x1="250" y1="250" x2="100" y2="100" />
+    <circle cx="100" cy="100" r="3" fill="#8B0000" />
+    <circle cx="300" cy="150" r="3" fill="#8B0000" />
+    <circle cx="250" cy="250" r="3" fill="#8B0000" />
+  </g>
+
+  <!-- Title: LOOP (Glitch effect via layered text) -->
+  <text x="498" y="140" font-family="monospace" font-size="120" font-weight="bold" fill="#FF0000" text-anchor="middle" opacity="0.5">LOOP</text>
+  <text x="502" y="140" font-family="monospace" font-size="120" font-weight="bold" fill="#00FFFF" text-anchor="middle" opacity="0.5">LOOP</text>
+  <text x="500" y="140" font-family="monospace" font-size="120" font-weight="bold" fill="#E0E0E0" text-anchor="middle">LOOP</text>
+
+  <!-- Subtitle -->
+  <text x="500" y="190" font-family="sans-serif" font-size="24" fill="#FF8C00" text-anchor="middle" letter-spacing="5">CAMP PINEHAVEN</text>
+  <text x="500" y="225" font-family="sans-serif" font-size="16" fill="#A0A0A0" text-anchor="middle" font-style="italic">A Time Loop Mystery</text>
+</svg>

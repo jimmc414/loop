@@ -13,6 +13,12 @@ A time-loop investigation game where every NPC conversation is powered by an LLM
 
 You wake up at Camp Pinehaven. Something terrible is going to happen in five days. When it does, time resets and you wake up again — but you remember everything. The NPCs don't. Or at least, they shouldn't.
 
+## Gameplay
+
+LOOP is a terminal-based investigation game. You use a rich text interface to explore the camp, track character schedules, and piece together evidence.
+
+![Gameplay Mockup](gameplay.svg)
+
 ## What makes this different
 
 Most time-loop games use scripted dialogue trees. LOOP uses Claude as the dialogue engine. NPCs respond to what you actually say — you can lie, empathize, confront, deflect. There are no dialogue options. You type what you want to say.
