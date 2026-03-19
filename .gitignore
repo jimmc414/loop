@@ -12,5 +12,6 @@ build/
 env/
 venv/
 loop/data/saves/*.json
+loop/data/logs/*.log
 loop/data/*.json
 *.docx

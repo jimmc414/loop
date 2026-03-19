@@ -31,6 +31,7 @@ loop/
   world_generator.py   # multi-step LLM world generation
   config.py            # constants and tuning knobs
   display.py           # Rich terminal UI
+  game_logger.py       # session logging (plain-text capture)
   rumor_mill.py        # NPC-to-NPC information propagation
   evidence_board.py    # player evidence tracking
   knowledge_base.py    # persistent cross-loop knowledge
@@ -78,6 +79,17 @@ python -m loop.main
 ```
 
 First run generates a new world (takes ~60 seconds). Subsequent runs load the saved world.
+
+### Session logging
+
+Record the entire game session to a plain-text file for review or analysis:
+
+```bash
+python -m loop.main --log                      # auto-generates timestamped file in loop/data/logs/
+python -m loop.main --log=my_session.log       # custom path
+```
+
+The log captures all terminal output (Rich markup stripped) and player input, bookended with timestamps.
 
 ## Run tests
 

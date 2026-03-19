@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 from rich import box
+
+from .game_logger import LoggingConsoleProxy
 
 from .config import (
     DAYS_PER_LOOP,
@@ -50,14 +53,20 @@ TITLE_ART = r"""
 class GameDisplay:
     """All terminal rendering via Rich."""
 
-    def __init__(self):
-        self.console = Console()
+    def __init__(self, log_path: str | Path | None = None):
+        self.console = LoggingConsoleProxy(log_path)
 
     # ── Input helper ───────────────────────────────────────────────────
 
     async def get_input(self, prompt: str = "> ") -> str:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: input(prompt).strip())
+        result = await loop.run_in_executor(None, lambda: input(prompt).strip())
+        self.console.log_only(f"[INPUT] {prompt}{result}")
+        return result
+
+    def close_log(self):
+        """Flush and close the session log file."""
+        self.console.close()
 
     # ── Title screen ───────────────────────────────────────────────────
 

@@ -15,6 +15,7 @@ from .actions import ActionResolver
 from .config import MODEL, TOTAL_SLOTS, slot_index as _slot_index
 from .conversation_engine import ConversationEngine
 from .display import GameDisplay
+from .game_logger import generate_log_path
 from .evidence_board import EvidenceBoard
 from .intervention import InterventionManager
 from .knowledge_base import KnowledgeBase
@@ -44,7 +45,17 @@ async def _llm_call(prompt: str) -> str:
 
 
 async def main():
-    display = GameDisplay()
+    # Enable session logging with --log flag, or --log=<path> for custom path
+    log_path = None
+    for arg in sys.argv[1:]:
+        if arg == "--log":
+            log_path = str(generate_log_path())
+        elif arg.startswith("--log="):
+            log_path = arg.split("=", 1)[1]
+
+    display = GameDisplay(log_path=log_path)
+    if log_path:
+        display.print(f"[dim]Session logging to: {log_path}[/]")
     save_mgr = SaveManager()
 
     # ── Title screen ───────────────────────────────────────────────────
@@ -288,6 +299,9 @@ async def main():
             save_mgr.auto_save(world, loop_state, knowledge)
 
     display.print("\n[bold]Thank you for playing LOOP.[/]\n")
+    if log_path:
+        display.print(f"[dim]Session log saved to: {log_path}[/]")
+    display.close_log()
 
 
 async def _between_loop_screen(
