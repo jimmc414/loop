@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -248,6 +249,17 @@ async def generate_world(max_retries: int = 3) -> WorldState:
 
             catastrophe_json = json.dumps(step1, indent=2)
 
+            # Fire opening narration in background (only needs camp_history from Step 1)
+            camp_history = step1.get("camp_history", "")
+            opening_narration_task = asyncio.create_task(_llm_call(
+                f"You are narrating the opening of a mystery game at Camp Pinehaven.\n"
+                f"Camp history: {camp_history}\n\n"
+                f"Write a brief, atmospheric opening (2-3 sentences). "
+                f"The player wakes up on their first morning at camp. "
+                f"Something feels slightly off, but they can't place it. "
+                f"End with them stepping out of their cabin."
+            ))
+
             # Step 2: Characters
             step2 = _load_step_cache("step2")
             if step2:
@@ -293,25 +305,42 @@ async def generate_world(max_retries: int = 3) -> WorldState:
 
             schedules_json = json.dumps(step3, indent=2)
 
-            # Step 4: Knowledge timelines
+            # Steps 4 & 5 depend on 1-3 but NOT on each other — run in parallel when possible
             step4 = _load_step_cache("step4")
-            if step4:
-                console.print("  [dim]Step 4/5: Knowledge timelines (cached)[/]")
-            else:
-                console.print("  [dim]Step 4/5: Knowledge timelines...[/]")
-                step4_raw = await _llm_call(step4_knowledge(catastrophe_json, characters_json, schedules_json))
-                step4 = _extract_json(step4_raw)
-                _save_step_cache("step4", step4)
-
-            # Step 5: Evidence + interventions + wild cards
             step5 = _load_step_cache("step5")
-            if step5:
+
+            if step4 and step5:
+                console.print("  [dim]Step 4/5: Knowledge timelines (cached)[/]")
                 console.print("  [dim]Step 5/5: Evidence & interventions (cached)[/]")
-            else:
-                console.print("  [dim]Step 5/5: Evidence & interventions...[/]")
-                step5_raw = await _llm_call(step5_evidence(catastrophe_json, characters_json, schedules_json))
+            elif not step4 and not step5:
+                # Neither cached — run both in parallel
+                console.print("  [dim]Step 4/5: Knowledge timelines...[/]")
+                console.print("  [dim]Step 5/5: Evidence & interventions (parallel)...[/]")
+                step4_raw, step5_raw = await asyncio.gather(
+                    _llm_call(step4_knowledge(catastrophe_json, characters_json, schedules_json)),
+                    _llm_call(step5_evidence(catastrophe_json, characters_json, schedules_json)),
+                )
+                step4 = _extract_json(step4_raw)
                 step5 = _extract_json(step5_raw)
+                _save_step_cache("step4", step4)
                 _save_step_cache("step5", step5)
+            else:
+                # One cached, one not — generate the uncached one
+                if step4:
+                    console.print("  [dim]Step 4/5: Knowledge timelines (cached)[/]")
+                else:
+                    console.print("  [dim]Step 4/5: Knowledge timelines...[/]")
+                    step4_raw = await _llm_call(step4_knowledge(catastrophe_json, characters_json, schedules_json))
+                    step4 = _extract_json(step4_raw)
+                    _save_step_cache("step4", step4)
+
+                if step5:
+                    console.print("  [dim]Step 5/5: Evidence & interventions (cached)[/]")
+                else:
+                    console.print("  [dim]Step 5/5: Evidence & interventions...[/]")
+                    step5_raw = await _llm_call(step5_evidence(catastrophe_json, characters_json, schedules_json))
+                    step5 = _extract_json(step5_raw)
+                    _save_step_cache("step5", step5)
 
             # ── Assemble WorldState ────────────────────────────────────
 
@@ -372,9 +401,16 @@ async def generate_world(max_retries: int = 3) -> WorldState:
                     eid for eid in ec.required_evidence if eid in valid_evidence_ids
                 ]
 
+            # Await opening narration (should be done by now, ran in parallel with steps 2-5)
+            try:
+                opening_narration = await opening_narration_task
+            except Exception:
+                opening_narration = ""
+
             world = WorldState(
                 catastrophe_description=step1["catastrophe_description"],
                 camp_history=step1.get("camp_history", ""),
+                opening_narration=opening_narration,
                 characters=characters,
                 locations=locations,
                 causal_chain=causal_chain,

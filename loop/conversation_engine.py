@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 
@@ -67,11 +68,13 @@ PRESSURE_PATTERNS = re.compile(
 class ConversationEngine:
     """Manages NPC conversations with LLM dialogue and deterministic trust."""
 
-    def __init__(self, world: WorldState, display: GameDisplay):
+    def __init__(self, world: WorldState, display: GameDisplay, prefetch=None):
         self.world = world
         self.display = display
+        self.prefetch = prefetch
         self._char_map = {c.name: c for c in world.characters}
         self._evidence_keywords: dict[str, list[str]] = {}
+        self._pending_claim_tasks: list[tuple[asyncio.Task, str, LoopState]] = []
         self._build_evidence_keywords()
 
     def _build_evidence_keywords(self):
@@ -231,6 +234,8 @@ class ConversationEngine:
                     location=new_loc,
                     activity="hiding / destroying evidence",
                 )
+                if self.prefetch:
+                    self.prefetch.invalidate_schedule()
 
         return npc_response, delta, discovered
 
@@ -405,22 +410,26 @@ class ConversationEngine:
         # Extract topics discussed
         topics = self._extract_topics(history)
 
-        # Extract claims for the Rumor Mill
+        # Extract claims for the Rumor Mill (background — not needed until advance_time)
         if history:
-            new_claims = await extract_claims_from_conversation(
-                char_name, history, loop_state,
+            self.display.print(
+                f"\n  [dim italic]{char_name} will remember what was discussed...[/]"
             )
-            for claim in new_claims:
-                loop_state.active_claims.append(claim)
-                # NPC heard these claims directly
-                loop_state.npc_heard_claims.setdefault(char_name, [])
-                if claim.id not in loop_state.npc_heard_claims[char_name]:
-                    loop_state.npc_heard_claims[char_name].append(claim.id)
 
-            if new_claims:
-                self.display.print(
-                    f"\n  [dim italic]{char_name} will remember what was discussed...[/]"
-                )
+            async def _extract_and_store(
+                name: str, hist: list[dict], ls: LoopState,
+            ):
+                new_claims = await extract_claims_from_conversation(name, hist, ls)
+                for claim in new_claims:
+                    ls.active_claims.append(claim)
+                    ls.npc_heard_claims.setdefault(name, [])
+                    if claim.id not in ls.npc_heard_claims[name]:
+                        ls.npc_heard_claims[name].append(claim.id)
+
+            task = asyncio.create_task(
+                _extract_and_store(char_name, list(history), loop_state)
+            )
+            self._pending_claim_tasks.append((task, char_name, loop_state))
 
         # Track meeting
         if char_name not in knowledge.characters_met:
@@ -549,3 +558,11 @@ class ConversationEngine:
                 topics.append(ev_id)
 
         return topics
+
+    async def flush_pending_claims(self) -> None:
+        """Await all background claim extraction tasks. Call before advance_time()."""
+        if not self._pending_claim_tasks:
+            return
+        tasks = [t for t, _, _ in self._pending_claim_tasks]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self._pending_claim_tasks.clear()

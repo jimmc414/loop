@@ -156,6 +156,7 @@ class WorldState(BaseModel):
     catastrophe_day: int = 5
     catastrophe_slot: TimeSlot = TimeSlot.NIGHT
     camp_history: str = ""
+    opening_narration: str = ""
     characters: list[Character] = Field(default_factory=list)
     locations: list[Location] = Field(default_factory=list)
     causal_chain: list[CausalChainEvent] = Field(default_factory=list)

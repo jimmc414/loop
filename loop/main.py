@@ -18,6 +18,7 @@ from .evidence_board import EvidenceBoard
 from .intervention import InterventionManager
 from .knowledge_base import KnowledgeBase
 from .models import LoopState, PersistentKnowledge, WorldState
+from .prefetch import PrefetchCache
 from .prompts.summary import build_ending_prompt, build_summary_prompt
 from .saves import SaveManager
 from .schedule_tracker import ScheduleTracker
@@ -95,13 +96,14 @@ async def main():
 
     # ── Initialize systems ─────────────────────────────────────────────
     engine = ClockworkEngine(world, loop_state, knowledge)
-    conversation = ConversationEngine(world, display)
+    prefetch = PrefetchCache()
+    conversation = ConversationEngine(world, display, prefetch)
     kb = KnowledgeBase(knowledge, world)
     intervention_mgr = InterventionManager(world, engine, display, conversation)
     evidence_board = EvidenceBoard(display, kb, world)
     schedule_tracker = ScheduleTracker(display, world)
     action_resolver = ActionResolver(
-        world, engine, display, conversation, kb, intervention_mgr
+        world, engine, display, conversation, kb, intervention_mgr, prefetch
     )
 
     # ── Opening narration ──────────────────────────────────────────────
@@ -109,7 +111,7 @@ async def main():
         display.clear()
         display.show_loop_reset(1, False)
 
-        opening = await _llm_call(
+        opening = world.opening_narration or await _llm_call(
             f"You are narrating the opening of a mystery game at Camp Pinehaven.\n"
             f"Camp history: {world.camp_history}\n\n"
             f"Write a brief, atmospheric opening (2-3 sentences). "
@@ -194,12 +196,35 @@ async def main():
                 await _show_ending(display, world, knowledge, ending)
             else:
                 engine = ClockworkEngine(world, loop_state, knowledge)
+                prefetch.clear()
                 display.show_loop_reset(loop_state.loop_number, time_result["catastrophe"])
+
+                # Fire loop narration in background while player reviews
+                ff_loop_num = loop_state.loop_number
+                ff_chars_met = len(knowledge.characters_met)
+                ff_evidence = len(knowledge.evidence_discovered)
+                ff_narration_task = asyncio.create_task(_llm_call(
+                    f"You are narrating the start of loop {ff_loop_num} in a time-loop mystery at Camp Pinehaven.\n"
+                    f"The player has lived through this before — {ff_loop_num - 1} time(s).\n"
+                    f"They've met {ff_chars_met} people and found {ff_evidence} pieces of evidence.\n"
+                    f"Camp setting: {world.camp_history[:200]}\n\n"
+                    f"Write 2-3 sentences of the player waking up again. Emphasize the growing "
+                    f"sense of deja vu and determination. Reference specific sensory details — "
+                    f"the bugle, the morning light, the smell of pine. Each loop should feel "
+                    f"slightly different as the player's knowledge grows."
+                ))
+
                 await _between_loop_screen(display, evidence_board, schedule_tracker,
                                             knowledge, kb, loop_state, world)
 
+                ff_narration = await ff_narration_task
+                display.print(f"\n  [italic]{ff_narration}[/]\n")
+                await display.get_input("[Press ENTER to continue]")
+
         # Advance time if action costs it
         if result.get("advance_time"):
+            # Flush background claim extraction before advancing time
+            await conversation.flush_pending_claims()
             time_result = engine.advance_time()
 
             if time_result["type"] == "loop_end":
@@ -239,14 +264,15 @@ async def main():
                     # Reset for new loop
                     # Rebuild engine with fresh loop state
                     engine = ClockworkEngine(world, loop_state, knowledge)
+                    prefetch.clear()
 
                     display.show_loop_reset(loop_state.loop_number, time_result["catastrophe"])
 
-                    # Generate per-loop opening narration (loops 2+)
+                    # Fire loop narration in background while player reviews evidence
                     loop_num = loop_state.loop_number
                     chars_met_count = len(knowledge.characters_met)
                     evidence_count = len(knowledge.evidence_discovered)
-                    loop_narration = await _llm_call(
+                    narration_task = asyncio.create_task(_llm_call(
                         f"You are narrating the start of loop {loop_num} in a time-loop mystery at Camp Pinehaven.\n"
                         f"The player has lived through this before — {loop_num - 1} time(s).\n"
                         f"They've met {chars_met_count} people and found {evidence_count} pieces of evidence.\n"
@@ -255,13 +281,16 @@ async def main():
                         f"sense of deja vu and determination. Reference specific sensory details — "
                         f"the bugle, the morning light, the smell of pine. Each loop should feel "
                         f"slightly different as the player's knowledge grows."
-                    )
-                    display.print(f"\n  [italic]{loop_narration}[/]\n")
-                    await display.get_input("[Press ENTER to continue]")
+                    ))
 
-                    # Between-loop screen
+                    # Between-loop screen (player reviews evidence/theories — 10-30+ seconds)
                     await _between_loop_screen(display, evidence_board, schedule_tracker,
                                                 knowledge, kb, loop_state, world)
+
+                    # Show loop narration after review (likely already done)
+                    loop_narration = await narration_task
+                    display.print(f"\n  [italic]{loop_narration}[/]\n")
+                    await display.get_input("[Press ENTER to continue]")
 
             elif time_result["type"] in ("slot_advance", "day_advance"):
                 # Show rumor propagation events
@@ -275,11 +304,17 @@ async def main():
                         display.print(
                             f"  [yellow italic]{rev['detail']}.[/]"
                         )
+                        prefetch.invalidate_schedule()
 
                 if time_result["type"] == "day_advance":
                     display.print(
                         f"\n  [bold]A new day dawns. Day {time_result['day']}.[/]"
                     )
+
+                # Pre-fetch observations for current + adjacent locations after time change
+                action_resolver.trigger_prefetch(
+                    loop_state.player_location, loop_state, knowledge
+                )
 
         # Auto-save periodically
         if loop_state.current_slot.value == "NIGHT":

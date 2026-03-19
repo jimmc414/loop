@@ -13,6 +13,7 @@ from .display import GameDisplay
 from .intervention import InterventionManager
 from .knowledge_base import KnowledgeBase
 from .models import LoopState, PersistentKnowledge, WorldState
+from .prefetch import PrefetchCache
 from .state_machine import ClockworkEngine
 
 
@@ -27,6 +28,7 @@ class ActionResolver:
         conversation: ConversationEngine,
         kb: KnowledgeBase,
         intervention_mgr: InterventionManager,
+        prefetch: PrefetchCache | None = None,
     ):
         self.world = world
         self.engine = engine
@@ -34,6 +36,7 @@ class ActionResolver:
         self.conversation = conversation
         self.kb = kb
         self.intervention_mgr = intervention_mgr
+        self.prefetch = prefetch or PrefetchCache()
 
     async def resolve(self, action: dict, loop_state: LoopState,
                       knowledge: PersistentKnowledge) -> dict:
@@ -173,18 +176,18 @@ class ActionResolver:
         self.display.print(f"  [green]Arrived at Day {target_day}, {target_slot_name}.[/]")
         return {"advance_time": False, "message": f"Fast-forwarded {result['slots_consumed']} slots."}
 
-    async def handle_observe(self, loop_state: LoopState) -> dict:
-        """Observe the current location — LLM generates atmospheric description."""
-        loc = self.engine.get_location(loop_state.player_location)
-        chars = self.engine.get_characters_at_location(loop_state.player_location)
-
-        # Record schedule observations for visible characters
+    def _observe_cache_key(self, location_id: str, loop_state: LoopState) -> str:
+        """Build a cache key for observation at a location."""
         idx = slot_index(loop_state.current_day, loop_state.current_slot.value)
-        for name in chars:
-            self.kb.record_schedule_observation(name, idx, loop_state.player_location)
-            self.kb.record_character_met(name)
+        chars = sorted(self.engine.get_characters_at_location(location_id))
+        return f"observe:{location_id}:{loop_state.current_day}:{loop_state.current_slot.value}:{','.join(chars)}:{self.prefetch.schedule_version}"
 
-        # Build observation prompt
+    def _build_observe_prompt(self, location_id: str, loop_state: LoopState) -> str:
+        """Build the observation prompt for a location."""
+        loc = self.engine.get_location(location_id)
+        chars = self.engine.get_characters_at_location(location_id)
+        idx = slot_index(loop_state.current_day, loop_state.current_slot.value)
+
         char_descriptions = []
         char_relationships = []
         for name in chars:
@@ -193,7 +196,6 @@ class ActionResolver:
                 entry = char.schedule[idx] if idx < len(char.schedule) else None
                 activity = entry.activity if entry else "here"
                 char_descriptions.append(f"- {name} ({char.role}): {activity}")
-                # Add relationship context for multi-NPC observations
                 for other_name in chars:
                     if other_name != name and other_name in char.relationships:
                         char_relationships.append(
@@ -219,8 +221,25 @@ class ActionResolver:
                 "whispered conversations, tension or camaraderie. "
             )
         prompt += "Be evocative but concise."
+        return prompt
 
-        description = await self._llm_call(prompt)
+    async def handle_observe(self, loop_state: LoopState) -> dict:
+        """Observe the current location — LLM generates atmospheric description."""
+        loc = self.engine.get_location(loop_state.player_location)
+        chars = self.engine.get_characters_at_location(loop_state.player_location)
+
+        # Record schedule observations for visible characters
+        idx = slot_index(loop_state.current_day, loop_state.current_slot.value)
+        for name in chars:
+            self.kb.record_schedule_observation(name, idx, loop_state.player_location)
+            self.kb.record_character_met(name)
+
+        # Check prefetch cache before making LLM call
+        cache_key = self._observe_cache_key(loop_state.player_location, loop_state)
+        prompt = self._build_observe_prompt(loop_state.player_location, loop_state)
+        description = await self.prefetch.wait_or_generate(
+            cache_key, self._llm_call(prompt)
+        )
         self.display.print(f"\n  [italic]{description}[/]")
 
         return {"advance_time": True, "message": "You observe the area."}
@@ -239,14 +258,17 @@ class ActionResolver:
         if result["found"]:
             for ev in result["found"]:
                 self.kb.discover_evidence(ev.id)
-                # LLM narration of finding
+                # LLM narration of finding — check prefetch cache
+                cache_key = f"evidence:{ev.id}"
                 prompt = (
                     f"The player just found evidence while searching {loop_state.player_location.replace('_', ' ')}.\n"
                     f"Evidence: {ev.description}\n"
                     f"Type: {ev.type.value}\n"
                     f"Write a brief discovery narration (1-2 sentences). Make it feel like a revelation."
                 )
-                narration = await self._llm_call(prompt)
+                narration = await self.prefetch.wait_or_generate(
+                    cache_key, self._llm_call(prompt)
+                )
                 self.display.print(f"\n  [bold green]EVIDENCE FOUND:[/] {ev.description}")
                 self.display.print(f"  [italic]{narration}[/]")
         else:
@@ -308,7 +330,10 @@ class ActionResolver:
     async def handle_intervene(self, intervention_id: str, loop_state: LoopState,
                                knowledge: PersistentKnowledge) -> dict:
         """Execute an intervention."""
-        return await self.intervention_mgr.execute(intervention_id, loop_state, knowledge)
+        result = await self.intervention_mgr.execute(intervention_id, loop_state, knowledge)
+        # Interventions can modify schedules — invalidate stale prefetch entries
+        self.prefetch.invalidate_schedule()
+        return result
 
     def handle_travel(self, destination_id: str, loop_state: LoopState,
                       knowledge: PersistentKnowledge) -> dict:
@@ -329,10 +354,47 @@ class ActionResolver:
             self.kb.record_schedule_observation(name, idx, destination_id)
             self.kb.record_character_met(name)
 
+        # Pre-fetch observations for this and adjacent locations
+        self.trigger_prefetch(destination_id, loop_state, knowledge)
+
         return {
             "advance_time": result["costs_slot"],
             "message": f"Arrived at {loc.name}.",
         }
+
+    def trigger_prefetch(self, location_id: str, loop_state: LoopState,
+                         knowledge: PersistentKnowledge) -> None:
+        """Pre-generate observation narrations for adjacent locations and evidence discovery."""
+        # Observation pre-fetch for current + adjacent locations
+        adjacent = self.engine.get_adjacent_locations(location_id)
+        all_locations = [location_id] + [adj.id for adj in adjacent]
+
+        for loc_id in all_locations:
+            cache_key = self._observe_cache_key(loc_id, loop_state)
+            prompt = self._build_observe_prompt(loc_id, loop_state)
+            self.prefetch.submit(cache_key, self._llm_call(prompt))
+
+        # Evidence discovery pre-fetch for findable evidence at current location
+        idx = slot_index(loop_state.current_day, loop_state.current_slot.value)
+        for ev in self.world.evidence_registry:
+            if ev.id in knowledge.evidence_discovered:
+                continue
+            if ev.source_location != location_id:
+                continue
+            from .config import slot_index as _si
+            ev_idx = _si(ev.available_day, ev.available_slot.value)
+            if idx < ev_idx:
+                continue
+            if not all(p in knowledge.evidence_discovered for p in ev.prerequisites):
+                continue
+            cache_key = f"evidence:{ev.id}"
+            prompt = (
+                f"The player just found evidence while searching {location_id.replace('_', ' ')}.\n"
+                f"Evidence: {ev.description}\n"
+                f"Type: {ev.type.value}\n"
+                f"Write a brief discovery narration (1-2 sentences). Make it feel like a revelation."
+            )
+            self.prefetch.submit(cache_key, self._llm_call(prompt))
 
     async def _llm_call(self, prompt: str) -> str:
         """Short LLM call for descriptions."""
