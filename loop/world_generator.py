@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 
 if "ANTHROPIC_API_KEY" in os.environ:
     del os.environ["ANTHROPIC_API_KEY"]
@@ -31,10 +32,34 @@ from .prompts.world_gen import (
 )
 
 
+CACHE_DIR = DATA_DIR / "gen_cache"
+
+
 async def _llm_call(prompt: str) -> str:
     """Single LLM call returning text content."""
     from .llm import llm_query
     return await llm_query(prompt)
+
+
+def _load_step_cache(step_name: str) -> dict | None:
+    """Load cached step result if available."""
+    path = CACHE_DIR / f"{step_name}.json"
+    if path.exists():
+        return json.loads(path.read_text())
+    return None
+
+
+def _save_step_cache(step_name: str, data: dict) -> None:
+    """Cache a step result to allow resuming after interruption."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = CACHE_DIR / f"{step_name}.json"
+    path.write_text(json.dumps(data, indent=2))
+
+
+def _clear_step_cache() -> None:
+    """Remove all cached step results."""
+    if CACHE_DIR.exists():
+        shutil.rmtree(CACHE_DIR)
 
 
 def _extract_json(text: str) -> dict:
@@ -212,16 +237,26 @@ async def generate_world(max_retries: int = 3) -> WorldState:
             console.print(f"\n[bold cyan]Generating world (attempt {attempt + 1}/{max_retries})...[/]")
 
             # Step 1: Catastrophe + causal chain
-            console.print("  [dim]Step 1/5: Catastrophe & causal chain...[/]")
-            step1_raw = await _llm_call(STEP1_CATASTROPHE)
-            step1 = _extract_json(step1_raw)
+            step1 = _load_step_cache("step1")
+            if step1:
+                console.print("  [dim]Step 1/5: Catastrophe & causal chain (cached)[/]")
+            else:
+                console.print("  [dim]Step 1/5: Catastrophe & causal chain...[/]")
+                step1_raw = await _llm_call(STEP1_CATASTROPHE)
+                step1 = _extract_json(step1_raw)
+                _save_step_cache("step1", step1)
 
             catastrophe_json = json.dumps(step1, indent=2)
 
             # Step 2: Characters
-            console.print("  [dim]Step 2/5: Characters...[/]")
-            step2_raw = await _llm_call(step2_characters(catastrophe_json))
-            step2 = _extract_json(step2_raw)
+            step2 = _load_step_cache("step2")
+            if step2:
+                console.print("  [dim]Step 2/5: Characters (cached)[/]")
+            else:
+                console.print("  [dim]Step 2/5: Characters...[/]")
+                step2_raw = await _llm_call(step2_characters(catastrophe_json))
+                step2 = _extract_json(step2_raw)
+                _save_step_cache("step2", step2)
 
             # Inter-step validation: verify character names match causal chain
             causal_names = {e["character"] for e in step1["causal_chain"]}
@@ -247,21 +282,36 @@ async def generate_world(max_retries: int = 3) -> WorldState:
             characters_json = json.dumps(step2, indent=2)
 
             # Step 3: Schedules
-            console.print("  [dim]Step 3/5: Schedules...[/]")
-            step3_raw = await _llm_call(step3_schedules(catastrophe_json, characters_json))
-            step3 = _extract_json(step3_raw)
+            step3 = _load_step_cache("step3")
+            if step3:
+                console.print("  [dim]Step 3/5: Schedules (cached)[/]")
+            else:
+                console.print("  [dim]Step 3/5: Schedules...[/]")
+                step3_raw = await _llm_call(step3_schedules(catastrophe_json, characters_json))
+                step3 = _extract_json(step3_raw)
+                _save_step_cache("step3", step3)
 
             schedules_json = json.dumps(step3, indent=2)
 
             # Step 4: Knowledge timelines
-            console.print("  [dim]Step 4/5: Knowledge timelines...[/]")
-            step4_raw = await _llm_call(step4_knowledge(catastrophe_json, characters_json, schedules_json))
-            step4 = _extract_json(step4_raw)
+            step4 = _load_step_cache("step4")
+            if step4:
+                console.print("  [dim]Step 4/5: Knowledge timelines (cached)[/]")
+            else:
+                console.print("  [dim]Step 4/5: Knowledge timelines...[/]")
+                step4_raw = await _llm_call(step4_knowledge(catastrophe_json, characters_json, schedules_json))
+                step4 = _extract_json(step4_raw)
+                _save_step_cache("step4", step4)
 
             # Step 5: Evidence + interventions + wild cards
-            console.print("  [dim]Step 5/5: Evidence & interventions...[/]")
-            step5_raw = await _llm_call(step5_evidence(catastrophe_json, characters_json, schedules_json))
-            step5 = _extract_json(step5_raw)
+            step5 = _load_step_cache("step5")
+            if step5:
+                console.print("  [dim]Step 5/5: Evidence & interventions (cached)[/]")
+            else:
+                console.print("  [dim]Step 5/5: Evidence & interventions...[/]")
+                step5_raw = await _llm_call(step5_evidence(catastrophe_json, characters_json, schedules_json))
+                step5 = _extract_json(step5_raw)
+                _save_step_cache("step5", step5)
 
             # ── Assemble WorldState ────────────────────────────────────
 
@@ -345,23 +395,33 @@ async def generate_world(max_retries: int = 3) -> WorldState:
                 if len(issues) > 10:
                     console.print(f"    [yellow]... and {len(issues) - 10} more[/]")
                 if attempt < max_retries - 1:
-                    console.print("  [yellow]Retrying...[/]")
+                    console.print("  [yellow]Retrying with fresh generation...[/]")
+                    _clear_step_cache()
                     continue
                 else:
                     console.print("  [yellow]Proceeding with warnings.[/]")
 
-            # Save
+            # Save and clean up step cache
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             world_path = DATA_DIR / "world_state.json"
             world_path.write_text(world.model_dump_json(indent=2))
+            _clear_step_cache()
             console.print(f"[green]  World saved to {world_path}[/]")
 
             return world
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             console.print(f"[red]  Error in generation: {e}[/]")
+            _clear_step_cache()
             if attempt < max_retries - 1:
                 console.print("  [yellow]Retrying...[/]")
+            else:
+                raise RuntimeError(f"World generation failed after {max_retries} attempts: {e}")
+        except (TimeoutError, OSError) as e:
+            console.print(f"[red]  Network/timeout error: {e}[/]")
+            # Keep step cache intact so next attempt resumes where it left off
+            if attempt < max_retries - 1:
+                console.print("  [yellow]Retrying (cached steps will be reused)...[/]")
             else:
                 raise RuntimeError(f"World generation failed after {max_retries} attempts: {e}")
 
