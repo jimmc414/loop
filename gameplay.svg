@@ -36,13 +36,11 @@
     
     <text x="30" y="345" font-weight="bold" fill="#888">── Explore ─────────</text>
     <text x="30" y="370" fill="#FFF"> 3. Observe</text>
-    <text x="30" y="390" fill="#FFF"> 4. Search [dim](costs time)[/]</text>
+    <text x="30" y="390" fill="#FFF"> 4. Search <tspan fill="#666">(costs time)</tspan></text>
     <text x="30" y="410" fill="#FFF"> 5. Travel to another location</text>
 
     <!-- Input Prompt -->
     <text x="30" y="460" fill="#00BCD4">Choose action: </text>
-    <rect x="155" y="448" width="10" height="18" fill="#00BCD4" opacity="0.8">
-      <animate attributeName="opacity" values="0.8;0;0.8" dur="1s" repeatCount="indefinite" />
-    </rect>
+    <rect x="155" y="448" width="10" height="18" fill="#00BCD4" opacity="0.8" />
   </g>
 </svg>

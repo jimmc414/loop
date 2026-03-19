@@ -2,7 +2,7 @@
   <!-- Background -->
   <rect width="1000" height="300" fill="#0B1A0F" />
   
-  <!-- Sun/Amber Glow (Simple circle for compatibility) -->
+  <!-- Sun/Amber Glow -->
   <circle cx="800" cy="100" r="150" fill="#FF8C00" opacity="0.2" />
 
   <!-- Forest Silhouette -->
@@ -13,11 +13,11 @@
   <!-- The Lake -->
   <rect x="0" y="270" width="1000" height="30" fill="#1A3A5A" opacity="0.4" />
 
-  <!-- Loop Element (Circular Arrow) -->
+  <!-- Loop Element -->
   <g transform="translate(500, 150)" opacity="0.5">
-    <path d="M -80,0 A 80,80 0 1,1 0,80" fill="none" stroke="#7DF9FF" stroke-width="2" stroke-dasharray="5,5" />
+    <path d="M -80,0 A 80,80 0 1,1 0,80" fill="none" stroke="#7DF9FF" stroke-width="2" />
     <path d="M 0,80 A 80,80 0 1,1 -80,0" fill="none" stroke="#7DF9FF" stroke-width="2" />
-    <polygon points="-80,0 -85,10 -75,10" fill="#7DF9FF" transform="rotate(-45, -80, 0)" />
+    <polygon points="-80,0 -85,10 -75,10" fill="#7DF9FF" />
   </g>
 
   <!-- Evidence Strings -->
@@ -30,12 +30,12 @@
     <circle cx="250" cy="250" r="3" fill="#8B0000" />
   </g>
 
-  <!-- Title: LOOP (Glitch effect via layered text) -->
+  <!-- Title: LOOP -->
   <text x="498" y="140" font-family="monospace" font-size="120" font-weight="bold" fill="#FF0000" text-anchor="middle" opacity="0.5">LOOP</text>
   <text x="502" y="140" font-family="monospace" font-size="120" font-weight="bold" fill="#00FFFF" text-anchor="middle" opacity="0.5">LOOP</text>
   <text x="500" y="140" font-family="monospace" font-size="120" font-weight="bold" fill="#E0E0E0" text-anchor="middle">LOOP</text>
 
   <!-- Subtitle -->
-  <text x="500" y="190" font-family="sans-serif" font-size="24" fill="#FF8C00" text-anchor="middle" letter-spacing="5">CAMP PINEHAVEN</text>
-  <text x="500" y="225" font-family="sans-serif" font-size="16" fill="#A0A0A0" text-anchor="middle" font-style="italic">A Time Loop Mystery</text>
+  <text x="500" y="190" font-family="sans-serif" font-size="24" fill="#FF8C00" text-anchor="middle">CAMP PINEHAVEN</text>
+  <text x="500" y="225" font-family="sans-serif" font-size="16" fill="#A0A0A0" text-anchor="middle">A Time Loop Mystery</text>
 </svg>
