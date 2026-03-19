@@ -1,6 +1,15 @@
+![LOOP Banner](header.svg)
+
 # LOOP
 
 A time-loop investigation game where every NPC conversation is powered by an LLM.
+
+## The Vibe
+
+*   **Setting:** Camp Pinehaven, a nostalgic 90s-style summer camp nestled in the Pacific Northwest.
+*   **Atmosphere:** Pine needles, lake mist, and an underlying sense of dread as the clock ticks toward the inevitable.
+*   **Mystery:** A clockwork world where everyone has a schedule, a secret, and a role in the coming catastrophe.
+*   **Deja Vu:** Break the loop by using knowledge from the future to manipulate the past.
 
 You wake up at Camp Pinehaven. Something terrible is going to happen in five days. When it does, time resets and you wake up again — but you remember everything. The NPCs don't. Or at least, they shouldn't.
 
