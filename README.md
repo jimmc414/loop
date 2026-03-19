@@ -17,7 +17,7 @@ You wake up at Camp Pinehaven. Something terrible is going to happen in five day
 
 LOOP is a terminal-based investigation game. You use a rich text interface to explore the camp, track character schedules, and piece together evidence.
 
-![Gameplay Mockup](gameplay.svg)
+![Gameplay Mockup](gameplay-v2.svg)
 
 ## What makes this different
 
